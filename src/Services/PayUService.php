@@ -21,8 +21,17 @@ class PayUService
         'test' => 'https://sandbox.api.payulatam.com',
         'production' => 'https://api.payulatam.com',
     ];
+    
+    // Añadimos URLs específicas para Colombia
+    protected array $checkoutUrls = [
+        'test' => 'https://sandbox.checkout.payulatam.com/ppp-web-gateway-payu',
+        'production' => 'https://checkout.payulatam.com/ppp-web-gateway-payu',
+    ];
 
     protected array $data = [];
+    
+    // Añadimos los métodos de pago disponibles para Colombia
+    protected array $paymentMethods = [];
 
     public function __construct()
     {
@@ -30,6 +39,9 @@ class PayUService
         $this->accountId = get_payment_setting('account_id', PayUServiceProvider::MODULE_NAME);
         $this->apiKey = get_payment_setting('api_key', PayUServiceProvider::MODULE_NAME);
         $this->apiLogin = get_payment_setting('api_login', PayUServiceProvider::MODULE_NAME);
+        
+        // Configuramos los métodos de pago habilitados
+        $this->paymentMethods = $this->getEnabledPaymentMethods();
     }
 
     public function withData(array $data): self
@@ -45,7 +57,7 @@ class PayUService
     {
         echo view('plugins/payu::form', [
             'data' => $this->data,
-            'action' => $this->getPaymentUrl(),
+            'action' => $this->getCheckoutUrl(),
         ]);
 
         exit();
@@ -66,7 +78,7 @@ class PayUService
                 'order' => [
                     'id' => Str::random(10),
                 ],
-                'reason' => 'Refund requested by customer',
+                'reason' => 'Reembolso solicitado por el cliente',
             ],
             'test' => get_payment_setting('environment', PayUServiceProvider::MODULE_NAME) === 'test',
         ];
@@ -150,9 +162,29 @@ class PayUService
         return $this->apiLogin;
     }
 
+    // Obtener los métodos de pago habilitados desde la configuración
+    protected function getEnabledPaymentMethods(): array
+    {
+        $enabledMethods = [];
+        $methods = [
+            'credit_card' => 'CREDIT_CARD',
+            'pse' => 'PSE',
+            'bank_transfer' => 'BANK_TRANSFER',
+            'cash' => 'CASH',
+        ];
+        
+        foreach ($methods as $key => $value) {
+            if (get_payment_setting($key . '_enabled', PayUServiceProvider::MODULE_NAME, '0') === '1') {
+                $enabledMethods[] = $value;
+            }
+        }
+        
+        return $enabledMethods;
+    }
+
     protected function getSignature(): string
     {
-        // For PayU Latam Colombia, the signature is calculated as:
+        // Para PayU Latam Colombia, la firma se calcula como:
         // md5(apiKey~merchantId~referenceCode~amount~currency)
         return md5(
             $this->getApiKey() . '~' . 
@@ -170,6 +202,8 @@ class PayUService
             'accountId' => $this->getAccountId(),
             'signature' => $this->getSignature(),
             'test' => get_payment_setting('environment', PayUServiceProvider::MODULE_NAME) === 'test' ? 1 : 0,
+            'paymentMethods' => implode(',', $this->paymentMethods),
+            'lap' => '', // Deja vacío para permitir todos los métodos de pago o especifica métodos específicos
         ]);
     }
 
@@ -178,6 +212,13 @@ class PayUService
         return $this->processUrls[
             get_payment_setting('environment', PayUServiceProvider::MODULE_NAME) ?: 'test'
         ] . $uri;
+    }
+
+    protected function getCheckoutUrl(): string
+    {
+        return $this->checkoutUrls[
+            get_payment_setting('environment', PayUServiceProvider::MODULE_NAME) ?: 'test'
+        ];
     }
 
     protected function getPaymentUrl(): string

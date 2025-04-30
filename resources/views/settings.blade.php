@@ -119,6 +119,44 @@
                                 ]"
                                 :value="get_payment_setting('environment', $moduleName)"
                             />
+                            
+                            <!-- Sección de métodos de pago para Colombia -->
+                            <div class="mt-4 mb-3">
+                                <h5>{{ trans('plugins/payu::payu.payment_methods') }}</h5>
+                                <p>{{ trans('plugins/payu::payu.payment_methods_description') }}</p>
+                            </div>
+                            
+                            <x-core-setting::on-off
+                                :name="'payment_' . $moduleName . '_credit_card_enabled'"
+                                :label="trans('plugins/payu::payu.credit_card_enabled')"
+                                :value="get_payment_setting('credit_card_enabled', $moduleName, '1')"
+                            />
+                            
+                            <x-core-setting::on-off
+                                :name="'payment_' . $moduleName . '_pse_enabled'"
+                                :label="trans('plugins/payu::payu.pse_enabled')"
+                                :value="get_payment_setting('pse_enabled', $moduleName, '0')"
+                            />
+                            
+                            <x-core-setting::on-off
+                                :name="'payment_' . $moduleName . '_bank_transfer_enabled'"
+                                :label="trans('plugins/payu::payu.bank_transfer_enabled')"
+                                :value="get_payment_setting('bank_transfer_enabled', $moduleName, '0')"
+                            />
+                            
+                            <x-core-setting::on-off
+                                :name="'payment_' . $moduleName . '_cash_enabled'"
+                                :label="trans('plugins/payu::payu.cash_enabled')"
+                                :value="get_payment_setting('cash_enabled', $moduleName, '0')"
+                            />
+                            
+                            <x-core-setting::text-input
+                                :name="'payment_' . $moduleName . '_payment_timeout'"
+                                :label="trans('plugins/payu::payu.payment_timeout')"
+                                :value="get_payment_setting('payment_timeout', $moduleName, '60')"
+                                placeholder="60"
+                            />
+                            <small class="form-text text-muted">{{ trans('plugins/payu::payu.payment_timeout_description') }}</small>
 
                             {!! apply_filters(PAYMENT_METHOD_SETTINGS_CONTENT, null, $moduleName) !!}
                         </div>
