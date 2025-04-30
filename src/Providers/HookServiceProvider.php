@@ -1,0 +1,144 @@
+<?php
+
+namespace FriendsOfBotble\PayU\Providers;
+
+use Botble\Base\Facades\Html;
+use Botble\Payment\Enums\PaymentMethodEnum;
+use Botble\Payment\Facades\PaymentMethods;
+use Botble\Payment\Models\Payment;
+use FriendsOfBotble\PayU\Services\PayUPaymentService;
+use FriendsOfBotble\PayU\Services\PayUService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
+use Throwable;
+
+class HookServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        add_filter(PAYMENT_METHODS_SETTINGS_PAGE, function (?string $settings) {
+            return $settings . view('plugins/payu::settings')->render();
+        }, 999);
+
+        add_filter(BASE_FILTER_ENUM_ARRAY, function (array $values, string $class): array {
+            if ($class === PaymentMethodEnum::class) {
+                $values['PAYU'] = PayUServiceProvider::MODULE_NAME;
+            }
+
+            return $values;
+        }, 999, 2);
+
+        add_filter(BASE_FILTER_ENUM_LABEL, function ($value, $class): string {
+            if ($class === PaymentMethodEnum::class && $value === PayUServiceProvider::MODULE_NAME) {
+                $value = 'PayU Colombia';
+            }
+
+            return $value;
+        }, 999, 2);
+
+        add_filter(BASE_FILTER_ENUM_HTML, function (string $value, string $class): string {
+            if ($class === PaymentMethodEnum::class && $value === PayUServiceProvider::MODULE_NAME) {
+                $value = Html::tag(
+                    'span',
+                    PaymentMethodEnum::getLabel($value),
+                    ['class' => 'label-success status-label']
+                )->toHtml();
+            }
+
+            return $value;
+        }, 999, 2);
+
+        add_filter(PAYMENT_FILTER_ADDITIONAL_PAYMENT_METHODS, function (?string $html, array $data): ?string {
+            if (get_payment_setting('status', PayUServiceProvider::MODULE_NAME)) {
+                $payUService = new PayUService();
+
+                if (! $payUService->getMerchantId() || ! $payUService->getApiKey()) {
+                    return $html;
+                }
+
+                PaymentMethods::method(PayUServiceProvider::MODULE_NAME, [
+                    'html' => view(
+                        'plugins/payu::method',
+                        $data,
+                        ['moduleName' => PayUServiceProvider::MODULE_NAME]
+                    )->render(),
+                ]);
+            }
+
+            return $html;
+        }, 999, 2);
+
+        add_filter(PAYMENT_FILTER_GET_SERVICE_CLASS, function (?string $data, string $value): ?string {
+            if ($value === PayUServiceProvider::MODULE_NAME) {
+                $data = PayUPaymentService::class;
+            }
+
+            return $data;
+        }, 20, 2);
+
+        add_filter(PAYMENT_FILTER_AFTER_POST_CHECKOUT, function (array $data, Request $request): array {
+            if ($data['type'] !== PayUServiceProvider::MODULE_NAME) {
+                return $data;
+            }
+
+            $paymentData = apply_filters(PAYMENT_FILTER_PAYMENT_DATA, [], $request);
+
+            try {
+                $payUService = new PayUService();
+                
+                $referenceCode = $payUService->transactionId();
+                $customerName = $paymentData['address']['name'] ?? '';
+                $firstName = Str::of($customerName)->before(' ')->toString();
+                $lastName = Str::of($customerName)->after(' ')->toString();
+                
+                $metadata = [
+                    'order_id' => $paymentData['order_id'],
+                    'currency' => $paymentData['currency'],
+                    'customer_id' => $paymentData['customer_id'],
+                    'customer_type' => addslashes($paymentData['customer_type']),
+                    'token' => $paymentData['checkout_token'],
+                ];
+
+                $payUService->withData([
+                    'referenceCode' => $referenceCode,
+                    'description' => $paymentData['description'],
+                    'amount' => $paymentData['amount'],
+                    'currency' => $paymentData['currency'],
+                    'buyerEmail' => $paymentData['address']['email'],
+                    'responseUrl' => route('payment.payu.callback'),
+                    'confirmationUrl' => route('payment.payu.webhook'),
+                    'buyerName' => $customerName,
+                    'buyerAddress' => $paymentData['address']['address'],
+                    'buyerCity' => $paymentData['address']['city'],
+                    'buyerState' => $paymentData['address']['state'],
+                    'buyerCountry' => $paymentData['address']['country'],
+                    'buyerPhone' => $paymentData['address']['phone'],
+                    'buyerPostalCode' => Arr::get($paymentData['address'], 'zip_code', Arr::get($paymentData['address'], 'zip')),
+                    'extra1' => json_encode($metadata),
+                ]);
+
+                $payUService->redirectToCheckoutPage();
+            } catch (Throwable $exception) {
+                $data['error'] = true;
+                $data['message'] = json_encode($exception->getMessage());
+            }
+
+            return $data;
+        }, 999, 2);
+
+        add_filter(PAYMENT_FILTER_PAYMENT_INFO_DETAIL, function (string $data, Payment $payment) {
+            if ($payment->payment_channel == PayUServiceProvider::MODULE_NAME) {
+                $detail = (new PayUService())->verifyPayment($payment->charge_id);
+                if (isset($payment->metadata['refunds'])) {
+                    $detail['data']['refunds'] = $payment->metadata['refunds'];
+                }
+
+                $data = view('plugins/payu::detail', ['payment' => $detail['data']])->render() . $data;
+            }
+
+            return $data;
+        }, 999, 2);
+    }
+}
