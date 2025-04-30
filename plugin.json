@@ -1,6 +1,6 @@
 {
     "id": "friendsofbotble/fob-payu",
-    "name": "PayU Payment Gateway",
+    "name": "PayU Payment Gateway - LATAM",
     "namespace": "FriendsOfBotble\\PayU\\",
     "provider": "FriendsOfBotble\\PayU\\Providers\\PayUServiceProvider",
     "author": "Friends of Botble",

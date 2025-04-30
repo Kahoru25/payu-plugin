@@ -101,11 +101,14 @@ class HookServiceProvider extends ServiceProvider
                     'token' => $paymentData['checkout_token'],
                 ];
 
+                // Get payment timeout from settings (default 60 minutes)
+                $paymentTimeout = (int) get_payment_setting('payment_timeout', PayUServiceProvider::MODULE_NAME, 60);
+
                 $payUService->withData([
                     'referenceCode' => $referenceCode,
                     'description' => $paymentData['description'],
                     'amount' => $paymentData['amount'],
-                    'currency' => $paymentData['currency'],
+                    'currency' => $paymentData['currency'] ?? 'COP', // Default to Colombian Peso
                     'buyerEmail' => $paymentData['address']['email'],
                     'responseUrl' => route('payment.payu.callback'),
                     'confirmationUrl' => route('payment.payu.webhook'),
@@ -117,6 +120,10 @@ class HookServiceProvider extends ServiceProvider
                     'buyerPhone' => $paymentData['address']['phone'],
                     'buyerPostalCode' => Arr::get($paymentData['address'], 'zip_code', Arr::get($paymentData['address'], 'zip')),
                     'extra1' => json_encode($metadata),
+                    'expirationDate' => now()->addMinutes($paymentTimeout)->format('Y-m-d\TH:i:s'),
+                    'paymentCountry' => 'CO', // Colombia country code
+                    'shippingCountry' => 'CO', // Colombia country code
+                    'udf1' => json_encode($metadata), // User defined field for metadata
                 ]);
 
                 $payUService->redirectToCheckoutPage();
